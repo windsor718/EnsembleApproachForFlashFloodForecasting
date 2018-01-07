@@ -4,7 +4,7 @@
 figures used in the manuscripts.  
 
 ## preProcess  
-Scripts to process the meteorological datasets to match the resolution of land surface model. As the land surface model used in this study uses its original encoding style (gtool format), decoding script is also included to convert to plain-binary for the hydrodyamic model.  
+Scripts to process the meteorological datasets to match the resolution of land surface model. As the land surface model used in this study uses its original encoding style (gtool format), decoding script is also included to convert to the plain-binary format for the hydrodyamic model.  
 
 ## visualization  
 Scripts to analyze and visualize the outputs. Mainly coded by Python.  
