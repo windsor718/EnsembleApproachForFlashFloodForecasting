@@ -12,4 +12,4 @@ Scripts to analyze and visualize the outputs. Mainly coded by Python.
 The other datasets including model outputs and observation data are arichived and publicaly accessible at (http://hydro.iis.u-tokyo.ac.jp/~yuta/EnsembleApproachTowardFlashFloodForecasting.tar.gz). If the file was too big to download or expand to your environment, the author would happily divide the required data from the archived file and provide them.   
   
   
-Any inquiry about this repository: please contact at yuta@rainbow.iis.u-tokyo.ac.jp  
+Any inquiry about this repository: please contact yuta@rainbow.iis.u-tokyo.ac.jp  
