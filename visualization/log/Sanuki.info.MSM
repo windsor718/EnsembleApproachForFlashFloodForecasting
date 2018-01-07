@@ -1,0 +1,19 @@
+[stationInfo]
+stName    = Sanuki
+
+latDeg    = 36
+latMin    = 44
+latSec    = 53
+
+lonDeg    = 139
+lonMin    = 48
+lonSec    = 5
+
+uarea     = 1070.30
+#[km2]
+threshold = none
+#[m3/s]
+dMax      = 8000
+
+pYticks   = 0,5,10,15,20,25,30
+dYticks   = 2000,4000,6000,8000

@@ -1,0 +1,19 @@
+[stationInfo]
+stName    = Ishii
+
+latDeg    = 36
+latMin    = 32
+latSec    = 32
+
+lonDeg    = 139
+lonMin    = 56
+lonSec    = 50
+
+uarea     = 1230.00
+#[km2]
+threshold = 6200
+#[m3/s]
+dMax      = 8000
+
+pYticks   = 0,5,10,15,20,25,30
+dYticks   = 2000,4000,6000,8000

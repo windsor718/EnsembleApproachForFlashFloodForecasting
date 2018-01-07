@@ -1,0 +1,290 @@
+#/usr/bin/env python
+import os
+import sys
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import datetime as dt
+import subprocess
+import matplotlib.pyplot as plt
+
+sns.set(context="paper",style="whitegrid")
+
+startDate = "2015090800"
+endDate   = "2015091123"
+startDate = dt.datetime.strptime(startDate,"%Y%m%d%H")
+endDate   = dt.datetime.strptime(endDate,"%Y%m%d%H")
+
+year      = startDate.year
+mon       = startDate.month
+day       = startDate.day
+hour      = startDate.hour
+
+#basic setting
+prcpDir   = "/data3/yuta/GPV_jpn/DATA/FT24/processed_bindata24/%02d/%04d.%02d/"
+prcpFile  = "rdr_%04d%02d%02d%02d.bin"
+dscgDir   = "/data4/yuta/camaOut/RDR5_newriv/%04d/%02d/%02d/%02d/"
+dscgFile  = "outflw%04d.bin"
+
+execStep  = 24 #hour
+tRes      = 1  #hour
+tFreq     = 6  #hour
+
+outDir    = "./figure"
+stName    = "Hirakata"
+outFile   = "hyehyd_%s_%04d%02d%02d%02d"%(stName,year,mon,day,hour)
+
+obsFile   = "./observed_discharge_kinu.csv"
+
+#domain
+north     = 46
+south     = 24
+west      = 123
+east      = 148
+
+matOrder  = "SN"
+res       = 0.05
+nx        = 500
+ny        = 440
+#observation point
+latDeg    = 36
+latMin    = 13
+latSec    = 33
+
+lonDeg    = 139
+lonMin    = 54
+lonSec    = 42
+upaDir    = "/data3/yuta/CaMa-Flood_v3.6.2_FlPd/map/region_jpn5km"
+upaFile   = "uparea.bin"
+
+uarea     = 1626.40 #[km2]
+
+#advanced setting
+idxStart  = 0
+idxEnd    = 24 #[idxStart:idxEnd]
+
+buf       = 3
+prcpC     = 3600
+
+
+def setDate():
+    start = dt.datetime.strptime(startDate,"%Y%m%d%H")
+    end   = dt.datetime.strptime(endDate,"%Y%m%d%H")
+    return start, end
+
+
+def calcDeg(degree,minute,second):
+    DEG=float(degree)+(float(minute)/60)+(float(second)/3600)
+    return DEG
+
+
+def uparea():
+    ERR = 1e+20
+    LAT  = -9999
+    LON  = -9999
+    cnt  = 0
+
+    lat  = calcDeg(latDeg,latMin,latSec)
+    lon  = calcDeg(lonDeg,lonMin,lonSec)
+
+    gridLat = int((north - lat)/res)
+    gridLon = int((lon - west)/res)
+
+    upaPath = os.path.join(upaDir,upaFile)
+    umap = np.fromfile(os.path.join(upaDir,upaPath),np.float32).reshape(ny,nx)
+
+    for i in range(-buf,buf+1):
+        for j in range(-buf,buf+1):
+            marea = umap[gridLat+i,gridLon+j]/(1000*1000)
+            error = ((marea - uarea)**2)**0.5
+            if cnt == 0 or error < ERR:
+                ERR = error
+                LAT = gridLat+i
+                LON = gridLon+j
+            cnt = cnt + 1
+
+    print "LatGrid:%d LonGrid:%d"%(LAT,LON)
+    return LAT,LON
+
+
+def makeMask(lat,lon):
+    if os.path.exists("./mask") == False:
+        os.makedirs("./mask")
+
+    fortLon = lon + 1
+    fortLat = lat + 1
+
+    crrDir  = os.getcwd()
+    os.chdir(upaDir)
+    subprocess.call([crrDir+"/calc_basin.o",str(fortLon),str(fortLat),str(nx),str(ny)])
+    subprocess.call(["mv","./mask.bin",crrDir+"/mask/"])
+    os.chdir(crrDir)
+
+    mask = np.fromfile("./mask/mask.bin",np.int32).reshape(1,ny,nx)
+
+    return mask
+
+
+def basinPrcp():
+    print "read precipitation."
+    date = startDate
+    while date <= endDate:
+        year = date.year
+        mon  = date.month
+        day  = date.day
+        hour = date.hour
+
+        dPath = os.path.join(prcpDir%(hour,year,mon), prcpFile%(year,mon,day,hour))
+        print dPath
+        if matOrder == "SN":
+            data  = np.fromfile(dPath,np.float32).reshape(-1,ny,nx)[idxStart:idxEnd,::-1]
+        elif matOrder == "NS":
+            data  = np.fromfile(dPath,np.float32).reshape(-1,ny,nx)[idxStart:idxEnd]
+        else:
+            raise KeyError
+        print data.shape
+
+        if date == startDate:
+            prcp = data
+        else:
+            prcp = np.concatenate((prcp,data))
+        
+        date = date + dt.timedelta(hours=execStep)
+
+    lat,lon  = uparea()
+    mask     = np.ma.masked_less(makeMask(lat,lon),1)
+    mPrcp    = prcp*mask*prcpC
+
+    mPrcpAvg = np.nanmean(mPrcp,axis=(1,2))
+
+    return mPrcpAvg
+
+
+def readDscgObsFile():
+    data    = pd.read_csv("./observed_discharge_Kinu.csv",header=0,index_col=0,parse_dates=True)
+    obsData = data[stName]
+    # JST
+    sDate   = startDate + dt.timedelta(hours=9) + dt.timedelta(hours=1)
+    eDate   = endDate + dt.timedelta(hours=9) + dt.timedelta(hours=1) # plus 1 to read latter value in the one dt.
+    obsData = obsData[sDate:eDate]
+    return obsData.values
+    
+
+def discharge():
+    print "read discharge."
+    lat,lon = uparea()
+    date = startDate
+    while date <= endDate:
+        year = date.year
+        mon  = date.month
+        day  = date.day
+        hour = date.hour
+
+        dPath = os.path.join(dscgDir%(year,mon,day,hour), dscgFile%(year))
+        print dPath
+        data  = np.fromfile(dPath,np.float32).reshape(-1,ny,nx)[idxStart:idxEnd,lat,lon]
+
+        if date == startDate:
+            dscg = data
+        else:
+            dscg = np.concatenate((dscg,data))
+
+        date = date + dt.timedelta(hours=execStep)
+
+    return dscg
+    
+
+def nashSutcliffe(obs,sim):
+    obsAvg = np.ones((obs.shape[0]))*obs.mean()
+
+    mother = ((obs-obsAvg)**2).sum()
+    son    = ((sim-obs)**2).sum()
+
+    NS     = 1 - (son/mother)
+    print "Nash-Sutcliffe coef. is: ", NS
+
+    return NS
+
+
+def RMSE(obs,sim):
+    SE   = (sim - obs)**2
+    MSE  = SE.mean()
+    RMSE = MSE**0.5
+
+    print "RMSE is: ", RMSE
+
+    return RMSE
+
+def MAE(obs,sim):
+    MAE = (np.absolute(obs-sim)).mean()
+
+    print "MAE is: ", MAE
+    return MAE
+
+def corrCoef(obs,sim):
+    cf = np.corrcoef(obs,sim)
+
+    print "corr. coef. is: ", cf[0][1]
+    return cf[0][1]
+
+def hyetohydro():
+    fig    = plt.figure(figsize=(25,10))
+
+    ax1    = plt.subplot(2,1,1)
+    prcp   = basinPrcp()
+    tshape = prcp.shape[0]
+    durat  = tshape*tRes
+    t      = 0
+    tindx  = []
+    dummy  = []
+    while t < durat:
+        date = startDate + dt.timedelta(hours=t*tRes)
+        tindx.append(date.strftime("%m/%d %H:00"))
+        dummy.append("")
+        t = t + tFreq
+    pMax   = prcp.max()+10
+    plt.plot(prcp,color="#283747",linewidth=2)
+    plt.ylim(pMax,0)
+    xRange = np.arange(0,tshape*tRes,tFreq)
+    plt.xticks(xRange,dummy)
+    plt.xlim(0,prcp.shape[0])
+    plt.yticks(fontsize=10)
+    plt.ylabel("Precip.[mm/h]",fontsize=15)
+    plt.title(stName,fontsize=20)
+
+
+    ax2       = plt.subplot(2,1,2)
+    dscgSim   = discharge()
+    dMax      = dscgSim.max()+dscgSim.max()/10
+    dscgObs   = readDscgObsFile()
+    plt.plot(dscgSim,color="#3498DB",linewidth=2,label="sim.")
+    plt.plot(dscgObs,color="#283747",linestyle="--",linewidth=2,label="obs.")
+    plt.ylim(0,dMax)
+    plt.xlim(0,dscgObs.shape[0])
+    plt.xticks(xRange,tindx,fontsize=10)
+    plt.xticks(rotation=45)
+    plt.yticks(fontsize=10)
+    plt.ylabel("discharge [m3/s]",fontsize=15)
+    plt.xlabel("date [UTC]",fontsize=15)
+    
+    plt.legend(loc="best",frameon=True,fontsize=15)
+
+    # statistical values
+    NS   = nashSutcliffe(dscgObs,dscgSim)
+    rmse = RMSE(dscgObs,dscgSim)
+    mae  = MAE(dscgObs,dscgSim)
+    cf   = corrCoef(dscgObs,dscgSim)
+
+    tStr = "NashSutcliffe:%.2f\nCorr.Coef:%.2f\nMAE:%2.f" % (NS,cf,mae)
+    prop = dict(boxstyle="round",facecolor="wheat",alpha=0.5)
+    ax2.text(0.025,0.95,tStr,transform=ax2.transAxes,fontsize=12.5,verticalalignment="top",bbox=prop)
+
+    print ((dscgSim*3600).sum() - (dscgObs*3600).sum())/1000/1000/1000
+
+    outPath = os.path.join(outDir,outFile)
+    plt.savefig(outPath)
+    plt.show()
+
+
+if __name__ == "__main__":
+    hyetohydro()

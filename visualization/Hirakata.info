@@ -1,0 +1,19 @@
+[stationInfo]
+stName       = Hirakata
+
+latDeg    = 36
+latMin    = 13
+latSec    = 33
+
+lonDeg    = 139
+lonMin    = 54
+lonSec    = 42
+
+uarea     = 1626.40
+#[km2]
+threshold = 5400
+#[m3/s]
+dMax      = 18000
+
+pYticks   = 0,15,30,45,60
+dYticks   = 5000,10000,15000,20000
